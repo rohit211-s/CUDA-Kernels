@@ -1,6 +1,5 @@
 # Accelerating MNIST Training with Custom CUDA Kernels
 
-> This project is specifically optimized for GPUs using Turing architecture. Adaptations might be required for different GPU architectures.
 
 ## Motivation
 
