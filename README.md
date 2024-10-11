@@ -1,40 +1,38 @@
-# Training MNIST from Scratch with CUDA
+# Accelerating MNIST Training with Custom CUDA Kernels
 
-> This project is developed on a Turing architecture GPU. Modifications are required to run on other architectures.
+> This project is specifically optimized for GPUs using Turing architecture. Adaptations might be required for different GPU architectures.
 
-## But why?
+## Motivation
 
-I wanted to know how much overhead is added by Python-based ML frameworks like PyTorch, and how much faster we can possibly get by going lower-level (CUDA). It is also a good exercise for me to learn CUDA.
+The primary aim of this project was to assess the performance bottlenecks introduced by high-level machine learning frameworks like PyTorch, and to explore how much speedup could be achieved by implementing a low-level CUDA solution. Additionally, it served as a learning opportunity to deepen my understanding of CUDA and its direct application in neural network training.
 
-Coming from a Python/PyTorch/JAX-heavy background, this is my first time doing a large-ish CUDA project. Compared to many C++/CUDA repositories out there, I consider the code to be pretty clean and "pythonic", which hopefully makes it also approachable for other CUDA beginners.
+As someone with extensive experience using Python-based frameworks such as PyTorch and JAX, this marks my first larger-scale project written primarily in CUDA. The focus was to maintain code readability while ensuring that it remains accessible for others who are starting their journey with CUDA programming.
 
-I also wrote a blog post on **How Matrix Multiplication Works on the GPU**, you can read it on [here on HackMD](https://hackmd.io/@andylo/matrix-multiplication-on-gpu) or [here on Medium](https://towardsdatascience.com/matrix-multiplication-on-the-gpu-e920e50207a8?source=friends_link&sk=020a915e1fce7d910aacda22bce89129).
+## How does PyTorch stack up?
 
-## So... how slow is PyTorch?
+Surprisingly, PyTorch exhibits significant overhead, particularly with smaller networks. Even when utilizing PyTorch 2.0's `torch.compile` feature (tuned with `mode="max-autotune"` and `fullgraph=True` to reduce Python overhead), my results indicate that it can be up to **6 times slower** compared to the CUDA implementation.
 
-It's... pretty slow, at least for small networks. Even using PyTorch 2.0's `torch.compile` functionality (with `mode="max-autotune"` and `fullgraph=True`, which is supposed to remove all Python overhead), it can still be up to $6$ times slower than CUDA!
-
-This overhead goes down as the network gets larger, though it never completely goes away. It asymptotically approaches $\approx 20$% slower than CUDA.
+As the network scales, the gap narrows, yet PyTorch still lags behind by around **20%**, even in larger models.
 
 <p align="center">
-    <img src="https://github.com/andylolu2/cuda-nn/assets/66584117/4cea2704-228c-46bc-a274-dd0946083075" width="600" alt="Time graph">
+    <img src="https://github.com/andylolu2/cuda-nn/assets/66584117/4cea2704-228c-46bc-a274-dd0946083075" width="600" alt="Performance comparison graph">
 </p>
 
-There are a few reasons why PyTorch is (asymptotically) slower than CUDA:
-1. The main contributor is my implementation usees fp16 accumulation for matrix multiplication while PyTorch uses fp32. NVIDIA reports double(!) the amount of theoretical throughput using fp16. PyTorch defaults to fp32 for stability reasons, but I haven't encountered those issues in my runs.
-2. I tuned the hyperparameters for the CUDA implementation specifically for my hardware. I'm not sure if `max-autotune` does the same for PyTorch.
+Several factors contribute to PyTorch's comparative slowness:
+1. My CUDA implementation leverages fp16 precision during matrix multiplications, whereas PyTorch defaults to fp32, prioritizing stability. Notably, NVIDIA highlights that using fp16 can theoretically double throughput. My benchmarks didn't reveal any instability using fp16.
+2. The CUDA version was carefully fine-tuned for my specific hardware, while I’m unsure if PyTorch’s `max-autotune` feature fully optimizes for hardware-specific parameters.
 
-> [!NOTE]
-> I applied a few optimisations to both implementations.
-> 1. I preloaded all data into memory in order to minimise the host-device data transfer overhead.
-> 2. I allowed the PyTorch implementation to have a few warm-up steps before timing, to allow the JIT compiler to compile the graph.
+> **Note**
+> I've applied optimization techniques to both the PyTorch and CUDA versions:
+> 1. To minimize host-to-device data transfer delays, all data is preloaded into memory.
+> 2. I allowed PyTorch to perform several warm-up iterations to give its JIT compiler time to optimize the computation graph before timing the runs.
 
-My implementation is also not perfect! For example, I didn't use vectorized loads for my element-wise kernels (e.g., `relu`). I expect this to give a pretty substantial speedup too.
+Although the CUDA implementation delivers superior speed, it's not without potential improvements. For instance, I didn't utilize vectorized loading in some element-wise operations like `ReLU`, which could yield further performance gains.
 
-## Loss curve sanity check
+## Loss Curve Comparison
 
-Comparing the loss curves of the PyTorch and CUDA implementations, we can see that they are pretty much identical.
+To verify correctness, I compared the loss curves generated by both implementations. As expected, the training behavior is consistent between PyTorch and CUDA, indicating that the lower-level optimizations did not impact the convergence quality.
 
 <p align="center">
-    <img src="https://github.com/andylolu2/cuda-nn/assets/66584117/d48f55c5-f53e-4084-ad9b-ae7d6056dfba" width="600" alt="Loss graph">
+    <img src="https://github.com/andylolu2/cuda-nn/assets/66584117/d48f55c5-f53e-4084-ad9b-ae7d6056dfba" width="600" alt="Loss curve graph">
 </p>
